@@ -1,0 +1,4 @@
+# Web scraping dependencies
+playwright>=1.40.0
+
+# Existing dependencies
