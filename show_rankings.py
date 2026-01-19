@@ -27,15 +27,12 @@ def show_rankings():
     print("\n```")
     print("# MORALE CHECK ELO RANKINGS")
     print()
-    print("| Rank | Player                  | Rating  | +/-  |")
-    print("|------|-------------------------|---------|------|")
+    print("| Rank | Player                  | Rating  |")
+    print("|------|-------------------------|---------|")
     
     # Print rankings
-    default_rating = 1500.00
     for i, (player, rating) in enumerate(sorted_ratings, 1):
-        delta = rating - default_rating
-        delta_str = f"+{delta:.0f}" if delta >= 0 else f"{delta:.0f}"
-        print(f"| {i:^4} | {player:<23} | {rating:>6.2f} | {delta_str:>4} |")
+        print(f"| {i:^4} | {player:<23} | {rating:>6.2f} |")
     
     print()
     print(f"**Total Players:** {len(sorted_ratings)}  ")
