@@ -32,12 +32,14 @@ This is an Elo rating tracker for MORALE CHECK, a local Warhammer 40k gaming clu
 
 4. **update_elo.py**: Orchestration script
    - Combines all event CSVs into `data/all_events.csv`
+   - Deletes old ratings.json to prevent ghost players
    - Runs elo_updater.py on combined data
    - Outputs: `ratings.json`
 
 5. **show_rankings.py**: Display utility
    - Formats current rankings as markdown table
-   - Shows +/- from default rating
+   - Displays win-loss records (W-L or W-D-L format)
+   - Dynamic column widths based on longest player name
    - Discord-ready output
 
 6. **name_cleaner.py**: Name normalization utilities
@@ -118,12 +120,15 @@ BCP Event → bcp_all_rounds.py → data/events/event_XXX.csv
 
 ### Scraping a New Event
 ```bash
-python bcp_all_rounds.py <event_id> <num_rounds> "MORALE CHECK"
+python bcp_all_rounds.py <event_id> <num_rounds>
 ```
+- MORALE CHECK team filtering is the default
 - Automatically assigns next event number
 - Fetches roster and factions
 - Filters for team matches only
 - Saves to `data/events/event_XXX.csv`
+- Use `none` as third argument to disable filtering
+- Use a different team name as third argument for other teams
 
 ### Updating Rankings
 ```bash

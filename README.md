@@ -32,23 +32,26 @@ Track Elo ratings for your local gaming club using automated web scraping from B
 ### Scrape an Event
 
 ```bash
-# Basic usage (all matches)
+# MORALE CHECK team filter (default)
 python bcp_all_rounds.py <event_id> <num_rounds>
 
-# With team filter (only track team matches)
-python bcp_all_rounds.py <event_id> <num_rounds> "TEAM NAME"
+# Different team name
+python bcp_all_rounds.py <event_id> <num_rounds> "OTHER TEAM"
+
+# No team filter (all matches)
+python bcp_all_rounds.py <event_id> <num_rounds> none
 ```
 
 **Example:**
 ```bash
-python bcp_all_rounds.py kxuw1i2Xdykm 3 "MORALE CHECK"
+python bcp_all_rounds.py kxuw1i2Xdykm 3
 ```
 
 The scraper will:
 - Automatically assign the next event number
 - Fetch team roster and factions from BCP
 - Extract all rounds with match results
-- Filter for team-only matches (if team name provided)
+- Filter for MORALE CHECK team-only matches (default)
 - Save to `data/events/event_XXX.csv`
 
 ### Update Elo Rankings
@@ -57,7 +60,8 @@ The scraper will:
 python update_elo.py
 ```
 
-This combines all event CSVs and recalculates current Elo ratings.
+This combines all event CSVs and recalculates current Elo ratings from scratch.
+Note: Deletes existing `ratings.json` to prevent ghost players from filtered events.
 
 ### View Rankings
 
@@ -65,7 +69,11 @@ This combines all event CSVs and recalculates current Elo ratings.
 python show_rankings.py
 ```
 
-Generates a markdown-formatted table you can paste directly into Discord or other platforms.
+Generates a markdown-formatted table with:
+- Player rankings by Elo rating
+- Win-loss records (W-L or W-D-L if draws exist)
+- Dynamic column widths for clean display
+- Ready to paste into Discord or other platforms
 
 ## Project Structure
 
