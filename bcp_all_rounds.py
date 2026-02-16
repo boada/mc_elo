@@ -354,18 +354,23 @@ def main():
         print("Usage: python bcp_all_rounds.py <event_id> <num_rounds> [team_name]")
         print("\nExamples:")
         print("  python bcp_all_rounds.py kxuw1i2Xdykm 3")
-        print("  python bcp_all_rounds.py abc123xyz 5 'MORALE CHECK'")
+        print("  python bcp_all_rounds.py abc123xyz 5 'OTHER TEAM'")
+        print("  python bcp_all_rounds.py abc123xyz 5 none  (scrape all matches)")
         print("\nThe scraper will automatically:")
         print("  - Assign the next event number")
         print("  - Clean player names")
-        print("  - Filter for team matches only (if team_name provided)")
+        print("  - Filter for MORALE CHECK team matches only (default)")
         print("  - Save to data/events/event_XXX.csv")
         print("  - Update event registry")
         return
     
     event_id = sys.argv[1]
     num_rounds = int(sys.argv[2])
-    team_name = sys.argv[3] if len(sys.argv) > 3 else None
+    team_name = sys.argv[3] if len(sys.argv) > 3 else "MORALE CHECK"
+    
+    # Allow explicit "none" to disable team filtering
+    if team_name.lower() == "none":
+        team_name = None
     
     # Initialize event manager and get event number
     manager = EventManager()
