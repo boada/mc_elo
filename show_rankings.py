@@ -67,25 +67,29 @@ def show_rankings():
     # Sort by rating (descending)
     sorted_ratings = sorted(ratings.items(), key=lambda x: x[1], reverse=True)
     
+    # Calculate dynamic name column width (longest name + 2 spaces)
+    max_name_len = max(len(player) for player in ratings.keys())
+    name_width = max_name_len + 2
+    
     # Print header in markdown format
     print("\n```")
     print("# MORALE CHECK ELO RANKINGS")
     print()
     if has_draws:
-        print("| Rank | Player                  | Rating  | Record    |")
-        print("|------|-------------------------|---------|-----------|")
+        print(f"| Rank | {'Player':<{name_width}} | Rating  | Record    |")
+        print(f"|------|{'-' * (name_width + 2)}|---------|-----------|")
     else:
-        print("| Rank | Player                  | Rating  | Record  |")
-        print("|------|-------------------------|---------|---------|")
+        print(f"| Rank | {'Player':<{name_width}} | Rating  | Record  |")
+        print(f"|------|{'-' * (name_width + 2)}|---------|---------|")
     
     # Print rankings
     for i, (player, rating) in enumerate(sorted_ratings, 1):
         rec = records[player]
         record_str = format_record(rec['wins'], rec['draws'], rec['losses'], has_draws)
         if has_draws:
-            print(f"| {i:^4} | {player:<23} | {rating:>6.2f} | {record_str:^9} |")
+            print(f"| {i:^4} | {player:<{name_width}} | {rating:>6.2f} | {record_str:^9} |")
         else:
-            print(f"| {i:^4} | {player:<23} | {rating:>6.2f} | {record_str:^7} |")
+            print(f"| {i:^4} | {player:<{name_width}} | {rating:>6.2f} | {record_str:^7} |")
     
     print()
     print(f"**Total Players:** {len(sorted_ratings)}  ")
