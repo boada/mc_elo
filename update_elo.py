@@ -59,6 +59,11 @@ def calculate_elo():
     
     print(f"\nCalculating Elo ratings...")
     
+    # Delete old ratings to start fresh (prevents ghost players from filtered events)
+    ratings_file = Path("ratings.json")
+    if ratings_file.exists():
+        ratings_file.unlink()
+    
     # Run elo_updater.py
     result = subprocess.run(
         [sys.executable, "elo_updater.py", str(combined_file)],
