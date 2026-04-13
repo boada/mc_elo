@@ -33,7 +33,7 @@ def scrape_team_roster(event_id: str, team_name: str, page) -> Dict[str, str]:
     url = f"https://www.bestcoastpairings.com/event/{event_id}?active_tab=roster"
     print(f"\nFetching {team_name} roster: {url}")
     
-    page.goto(url, wait_until="networkidle", timeout=30000)
+    page.goto(url, wait_until="load", timeout=60000)
     
     # Polite delay
     delay = random.uniform(2.0, 4.0)
@@ -113,7 +113,7 @@ def scrape_team_roster(event_id: str, team_name: str, page) -> Dict[str, str]:
                             if clicked:
                                 # Wait for new page to load
                                 time.sleep(2.0)
-                                page.wait_for_load_state("networkidle", timeout=10000)
+                                page.wait_for_load_state("load", timeout=30000)
                                 page_num += 1
                                 
                                 # Polite delay between pages
@@ -155,7 +155,7 @@ def scrape_round(event_id: str, event_num: int, round_num: int, page, player_fac
     url = f"https://www.bestcoastpairings.com/event/{event_id}?round={round_num}"
     print(f"\nRound {round_num}: {url}")
     
-    page.goto(url, wait_until="networkidle", timeout=30000)
+    page.goto(url, wait_until="load", timeout=60000)
     
     # Polite delay - wait 2-4 seconds to simulate human browsing
     delay = random.uniform(2.0, 4.0)
@@ -257,7 +257,7 @@ def scrape_round(event_id: str, event_num: int, round_num: int, page, player_fac
                         
                         if clicked:
                             time.sleep(2.0)
-                            page.wait_for_load_state("networkidle", timeout=10000)
+                            page.wait_for_load_state("load", timeout=30000)
                             page_num += 1
                             
                             # Polite delay between pages
