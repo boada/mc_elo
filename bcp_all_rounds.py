@@ -27,7 +27,7 @@ def clean_player_name(name: str) -> str:
     return name
 
 
-def scrape_team_roster(event_id: str, team_name: str, page) -> Dict[str, str]:
+def scrape_team_roster(event_id: str, team_name: str, page, known_players: Optional[set] = None) -> Dict[str, str]:
     """Scrape team roster and factions from roster page, handling pagination."""
     # Use roster page instead of placings - clearer structure and team affiliations
     url = f"https://www.bestcoastpairings.com/event/{event_id}?active_tab=roster"
@@ -41,6 +41,9 @@ def scrape_team_roster(event_id: str, team_name: str, page) -> Dict[str, str]:
     time.sleep(delay)
     
     player_factions = {}
+    # Candidates: known players found under a non-MC team.
+    # Dict[name, list[(team, faction)]] — collected across ALL pages before resolving.
+    override_candidates: Dict[str, list] = {}
     page_num = 1
     
     while True:
@@ -75,7 +78,51 @@ def scrape_team_roster(event_id: str, team_name: str, page) -> Dict[str, str]:
                 
                 player_factions[cleaned_name] = faction
                 current_page_count += 1
-        
+
+        # Second pass: collect known players listed under a different team,
+        # or with no team at all.
+        # Do NOT add to player_factions yet — accumulate across all pages first
+        # so we can detect ambiguous name collisions before committing.
+        if known_players:
+            for i, raw_line in enumerate(lines):
+                raw_stripped = raw_line.strip()
+                if not raw_stripped:
+                    continue
+
+                faction = "Unknown"
+                if i + 2 < len(lines):
+                    potential_faction = lines[i + 2].strip()
+                    if potential_faction and potential_faction not in ["CHECKED IN", "DROPPED", "View List", ""]:
+                        faction = potential_faction
+
+                if ' - ' in raw_stripped:
+                    # Has a team listed — check if it's a known player under a different team
+                    parts = raw_stripped.rsplit(' - ', 1)
+                    if len(parts) != 2:
+                        continue
+                    potential_name = clean_player_name(parts[0].strip())
+                    their_team = parts[1].strip()
+                    if (
+                        potential_name in known_players
+                        and potential_name not in player_factions
+                        and their_team != team_name
+                    ):
+                        if potential_name not in override_candidates:
+                            override_candidates[potential_name] = []
+                        if (their_team, faction) not in override_candidates[potential_name]:
+                            override_candidates[potential_name].append((their_team, faction))
+                else:
+                    # No team listed — check for exact name match against known players
+                    potential_name = clean_player_name(raw_stripped)
+                    if (
+                        potential_name in known_players
+                        and potential_name not in player_factions
+                    ):
+                        if potential_name not in override_candidates:
+                            override_candidates[potential_name] = []
+                        if ("(no team)", faction) not in override_candidates[potential_name]:
+                            override_candidates[potential_name].append(("(no team)", faction))
+
         print(f"   Page {page_num}: Found {current_page_count} {team_name} players")
         
         # Check if there's a next page button
@@ -141,6 +188,25 @@ def scrape_team_roster(event_id: str, team_name: str, page) -> Dict[str, str]:
             break
     
     print(f"   Total: Found {len(player_factions)} {team_name} players across {page_num} page(s)")
+
+    # Reconcile override candidates collected across all pages.
+    # Only process players not already found under the correct team.
+    for name, hits in override_candidates.items():
+        if name in player_factions:
+            # Already found them as a legit MC member; ignore any other-team hits.
+            continue
+        if len(hits) == 1:
+            their_team, faction = hits[0]
+            player_factions[name] = faction
+            if their_team == "(no team)":
+                print(f"   WARNING: Known player '{name}' has no team listed. Including anyway.")
+            else:
+                print(f"   WARNING: Known player '{name}' is listed under '{their_team}', not '{team_name}'. Including anyway.")
+        else:
+            teams_listed = ", ".join(f"'{t}'" for t, _ in hits)
+            print(f"   WARNING: Known player '{name}' appears under {len(hits)} different teams ({teams_listed}).")
+            print(f"            Cannot auto-resolve — skipping '{name}'. Add them manually to the CSV if needed.")
+
     if player_factions:
         for player in sorted(player_factions.keys()):
             print(f"      {player}: {player_factions[player]}")
@@ -298,10 +364,18 @@ def scrape_all_rounds(event_id: str, event_num: int, num_rounds: int, team_name:
         page = context.new_page()
         
         try:
+            # Load known players from ratings.json to catch misregistered team members
+            known_players: Optional[set] = None
+            ratings_path = Path("ratings.json")
+            if ratings_path.exists():
+                import json
+                with open(ratings_path, encoding="utf-8") as f:
+                    known_players = set(json.load(f).keys())
+
             # Get team roster and factions if filtering requested
             player_factions = None
             if team_name:
-                player_factions = scrape_team_roster(event_id, team_name, page)
+                player_factions = scrape_team_roster(event_id, team_name, page, known_players)
                 if not player_factions:
                     print(f"\nWARNING: No players found for team '{team_name}'")
                     print("Proceeding without team filter...\n")
