@@ -11,6 +11,7 @@ Track Elo ratings for your local gaming club using automated web scraping from B
 - **Clean Name Handling**: Automatic name normalization and cleaning
 - **Polite Scraping**: Built-in delays and realistic browser fingerprinting
 - **Elo Calculations**: Standard Elo rating system (K-factor 32, default 1500)
+- **Glicko-2 Calculations**: Alternative rating system tracking rating confidence (RD) and volatility
 - **Pretty Rankings**: Generate Discord-ready markdown tables
 
 ## Installation
@@ -63,6 +64,18 @@ python update_elo.py
 This combines all event CSVs and recalculates current Elo ratings from scratch.
 Note: Deletes existing `ratings.json` to prevent ghost players from filtered events.
 
+### Update Glicko-2 Rankings
+
+```bash
+python glicko_updater.py
+```
+
+Uses the Glicko-2 system, which additionally tracks:
+- **Rating Deviation (RD)**: Confidence in the rating — lower means more certain
+- **Volatility**: How consistent a player's performance is
+
+Output is saved to `glicko_ratings.json`.
+
 ### View Rankings
 
 ```bash
@@ -82,6 +95,7 @@ mc_elo/
 ├── bcp_all_rounds.py      # Main web scraper
 ├── event_manager.py       # Event metadata tracking
 ├── elo_updater.py         # Elo calculation engine
+├── glicko_updater.py      # Glicko-2 calculation engine
 ├── update_elo.py          # Combine events and update ratings
 ├── show_rankings.py       # Display formatted rankings
 ├── name_cleaner.py        # Name normalization utilities
@@ -93,6 +107,7 @@ mc_elo/
 │   ├── events.json       # Event metadata registry
 │   └── all_events.csv    # Combined match history
 └── ratings.json          # Current Elo ratings
+└── glicko_ratings.json   # Current Glicko-2 ratings (with RD and volatility)
 ```
 
 ## Data Format
@@ -115,6 +130,7 @@ mc_elo/
 3. **Name Cleaning**: Normalizes names (Title Case, removes parentheticals)
 4. **Team Filtering**: Only includes matches where both players are on the team
 5. **Elo Calculation**: Standard Elo formula with K=32, starting rating=1500
+6. **Glicko-2 Calculation**: Processes matches in batch per rating period; tracks RD (confidence) and volatility alongside rating
 
 ## Best Practices
 
