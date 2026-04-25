@@ -1,4 +1,7 @@
 # Web scraping dependencies
 playwright>=1.40.0
 
+# Rating systems
+glicko2>=2.0.0
+
 # Existing dependencies

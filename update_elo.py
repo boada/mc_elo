@@ -1,6 +1,6 @@
 """
-Update Elo ratings from all event data.
-Combines all event CSVs and calculates current ratings.
+Update Elo and Glicko-2 ratings from all event data.
+Combines all event CSVs and calculates current ratings for both systems.
 """
 from pathlib import Path
 import csv
@@ -73,19 +73,6 @@ def calculate_elo():
     
     if result.returncode == 0:
         print(result.stdout)
-        
-        # Show top 10 ratings
-        import json
-        with open("ratings.json", 'r') as f:
-            ratings = json.load(f)
-        
-        sorted_ratings = sorted(ratings.items(), key=lambda x: x[1], reverse=True)
-        
-        print("\nCurrent Elo Ratings (Top 10):")
-        print("=" * 50)
-        for i, (player, rating) in enumerate(sorted_ratings[:10], 1):
-            print(f"  {i:2d}. {player:30s} {rating:7.2f}")
-        
         return True
     else:
         print(f"ERROR calculating Elo:")
@@ -93,16 +80,84 @@ def calculate_elo():
         return False
 
 
+def calculate_glicko():
+    """Run the Glicko-2 calculator on combined events."""
+    combined_file = Path("data/all_events.csv")
+    
+    if not combined_file.exists():
+        print("ERROR: Combined events file not found")
+        return False
+    
+    print(f"\nCalculating Glicko-2 ratings...")
+    
+    # Delete old ratings to start fresh
+    ratings_file = Path("glicko_ratings.json")
+    if ratings_file.exists():
+        ratings_file.unlink()
+    
+    # Run glicko_updater.py
+    result = subprocess.run(
+        [sys.executable, "glicko_updater.py", str(combined_file)],
+        capture_output=True,
+        text=True
+    )
+    
+    if result.returncode == 0:
+        print(result.stdout)
+        return True
+    else:
+        print(f"ERROR calculating Glicko-2:")
+        print(result.stderr)
+        return False
+
+
+def show_top_ratings():
+    """Display top 10 for quick reference."""
+    import json
+    
+    print("\n" + "=" * 60)
+    print("TOP 10 RANKINGS")
+    print("=" * 60)
+    
+    # Elo rankings
+    if Path("ratings.json").exists():
+        with open("ratings.json", 'r') as f:
+            elo_ratings = json.load(f)
+        sorted_elo = sorted(elo_ratings.items(), key=lambda x: x[1], reverse=True)
+        
+        print("\nElo Ratings:")
+        for i, (player, rating) in enumerate(sorted_elo[:10], 1):
+            print(f"  {i:2d}. {player:30s} {rating:7.2f}")
+    
+    # Glicko-2 rankings
+    if Path("glicko_ratings.json").exists():
+        with open("glicko_ratings.json", 'r') as f:
+            glicko_ratings = json.load(f)
+        sorted_glicko = sorted(glicko_ratings.items(), 
+                              key=lambda x: x[1]['rating'], 
+                              reverse=True)
+        
+        print("\nGlicko-2 Ratings:")
+        for i, (player, data) in enumerate(sorted_glicko[:10], 1):
+            rating = data['rating']
+            rd = data['rd']
+            print(f"  {i:2d}. {player:30s} {rating:7.2f} (±{rd:5.1f})")
+
+
 def main():
-    print("Updating Elo Ratings\n")
+    print("Updating Ratings\n")
     
     # Combine all events
     if not combine_events():
         return
     
-    # Calculate Elo
-    if calculate_elo():
-        print("\nDone! Ratings saved to ratings.json")
+    # Calculate both rating systems
+    elo_success = calculate_elo()
+    glicko_success = calculate_glicko()
+    
+    if elo_success or glicko_success:
+        show_top_ratings()
+        print("\nDone! Use 'python show_rankings.py' for full rankings.")
 
 
 if __name__ == "__main__":
