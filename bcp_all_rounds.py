@@ -215,136 +215,204 @@ def scrape_team_roster(event_id: str, team_name: str, page, known_players: Optio
 
 
 def scrape_round(event_id: str, event_num: int, round_num: int, page, player_factions: Optional[Dict[str, str]] = None) -> List[Dict[str, str]]:
-    """Scrape a single round, optionally filtering by team and capturing factions. Handles pagination."""
+    """Scrape a single round by parsing body text. Handles pagination."""
     results = []
-    
-    url = f"https://www.bestcoastpairings.com/event/{event_id}?round={round_num}"
+
+    url = f"https://www.bestcoastpairings.com/event/{event_id}?active_tab=pairings&round={round_num}"
     print(f"\nRound {round_num}: {url}")
-    
-    page.goto(url, wait_until="load", timeout=60000)
-    
-    # Polite delay - wait 2-4 seconds to simulate human browsing
+
+    page.goto(url, wait_until="networkidle", timeout=60000)
+
     delay = random.uniform(2.0, 4.0)
     print(f"   Waiting {delay:.1f}s (polite scraping)...")
     time.sleep(delay)
-    
-    # Check if round exists
-    page_text = page.inner_text('body')
-    if "Placings are up to date" not in page_text and "Round" not in page_text:
-        return []
-    
+
     page_num = 1
-    
+
     while True:
-        # Parse matches on current page
-        match_links = page.query_selector_all('a.css-1dgqwoj')
-        
-        if not match_links:
+        page_text = page.inner_text('body')
+
+        if f"Round {round_num}" not in page_text and "Win:" not in page_text:
             if page_num == 1:
                 print(f"   WARNING: No matches found")
             break
-        
-        current_page_matches = 0
-        for match_link in match_links:
-            try:
-                paragraphs = match_link.query_selector_all('p')
-                texts = [p.inner_text().strip() for p in paragraphs if p.inner_text().strip()]
-                
-                if len(texts) >= 7:
-                    player1_name = clean_player_name(texts[1])
-                    player1_result_text = texts[3]
-                    player2_name = clean_player_name(texts[5])
-                    
-                    # If filtering by team, only include matches between team members
-                    if player_factions and (player1_name not in player_factions or player2_name not in player_factions):
-                        continue
-                    
-                    if "Win:" in player1_result_text:
-                        result = "1"
-                    elif "Loss:" in player1_result_text:
-                        result = "0"
-                    else:
-                        result = "0.5"
-                    
-                    match_data = {
-                        "event_num": event_num,
-                        "event_id": event_id,
-                        "round": round_num,
-                        "player1": player1_name,
-                        "player2": player2_name,
-                        "result": result
-                    }
-                    
-                    # Add faction data if available
-                    if player_factions:
-                        match_data["player1_faction"] = player_factions.get(player1_name, "Unknown")
-                        match_data["player2_faction"] = player_factions.get(player2_name, "Unknown")
-                    
-                    results.append(match_data)
-                    current_page_matches += 1
-                    
-            except Exception as e:
-                continue
-        
-        if page_num == 1:
-            print(f"   Page {page_num}: Extracted {current_page_matches} team matches")
-        else:
-            print(f"   Page {page_num}: Extracted {current_page_matches} team matches")
-        
+
+        current_page_matches = parse_matches_from_text(
+            page_text, event_num, event_id, round_num, player_factions
+        )
+        results.extend(current_page_matches)
+        print(f"   Page {page_num}: Extracted {len(current_page_matches)} team matches")
+
         # Check for next page
-        try:
-            page_text = page.inner_text('body')
-            
-            # Look for pagination info
-            if " of " in page_text:
-                import re
-                match = re.search(r'(\d+)-(\d+) of (\d+)', page_text)
-                if match:
-                    current_end = int(match.group(2))
-                    total = int(match.group(3))
-                    
-                    if current_end < total:
-                        # Try to click next button
-                        next_selectors = [
-                            'button[aria-label="Go to next page"]',
-                            'button:has-text("›")',
-                            'button:has-text("Next")',
-                            '[aria-label="next page"]',
-                        ]
-                        
-                        clicked = False
-                        for selector in next_selectors:
-                            try:
-                                page.click(selector, timeout=2000)
-                                clicked = True
-                                break
-                            except:
-                                continue
-                        
-                        if clicked:
-                            time.sleep(2.0)
-                            page.wait_for_load_state("load", timeout=30000)
-                            page_num += 1
-                            
-                            # Polite delay between pages
-                            delay = random.uniform(1.5, 2.5)
-                            time.sleep(delay)
-                            continue
-                        else:
-                            break
-                    else:
+        match = re.search(r'(\d+)-(\d+) of (\d+)', page_text)
+        if match:
+            current_end = int(match.group(2))
+            total = int(match.group(3))
+            if current_end < total:
+                next_selectors = [
+                    'button[aria-label="Go to next page"]',
+                    'button:has-text("›")',
+                    'button:has-text("Next")',
+                    '[aria-label="next page"]',
+                ]
+                clicked = False
+                for selector in next_selectors:
+                    try:
+                        page.click(selector, timeout=2000)
+                        clicked = True
                         break
-                else:
-                    break
-            else:
-                break
-        except Exception as e:
-            break
-    
+                    except:
+                        continue
+                if clicked:
+                    time.sleep(2.0)
+                    page.wait_for_load_state("networkidle", timeout=30000)
+                    page_num += 1
+                    delay = random.uniform(1.5, 2.5)
+                    time.sleep(delay)
+                    continue
+        break
+
     total_msg = f"   Total: {len(results)} team matches"
     if page_num > 1:
         total_msg += f" (across {page_num} pages)"
     print(total_msg)
+    return results
+
+
+def parse_matches_from_text(
+    page_text: str,
+    event_num: int,
+    event_id: str,
+    round_num: int,
+    player_factions: Optional[Dict[str, str]],
+) -> List[Dict]:
+    """
+    Parse match results from BCP round page body text.
+
+    BCP page text format (one match):
+        [table number e.g. "01"]
+        [player 1 name]
+        [player 1 faction]
+        Win: XX  or  Loss: XX
+        View List
+        [player 2 name]
+        [player 2 faction]
+        Win: XX  or  Loss: XX
+        View List
+    """
+    STATUS_TOKENS = {"CHECKED IN", "DROPPED", "View List", "TABLE", "Items per page"}
+    NAV_TOKENS = {
+        "Play", "Organize", "Leaderboards", "Subscribe", "Login",
+        "Overview", "Roster", "Pairings", "Placings",
+        "COOKIE CONSENT", "Accept All", "Essential Only", "Cookie Settings",
+        "Quick Links", "Home", "Events", "Subscription", "Store Finder",
+        "Ticketing", "Patch Notes", "Partners", "Privacy Policy",
+    }
+
+    lines = [l.strip() for l in page_text.split('\n') if l.strip()]
+
+    # Find where the round content starts
+    start_idx = 0
+    for i, line in enumerate(lines):
+        if line == f"Round {round_num}":
+            start_idx = i
+            break
+
+    results = []
+    i = start_idx
+
+    while i < len(lines):
+        line = lines[i]
+
+        # Detect result line for player 1
+        if not (line.startswith("Win:") or line.startswith("Loss:")):
+            i += 1
+            continue
+
+        p1_result_text = line
+        # Walk backwards to find p1 faction and name (skip "View List" etc.)
+        p1_faction = "Unknown"
+        p1_name = None
+        j = i - 1
+        while j >= start_idx:
+            candidate = lines[j]
+            if candidate in STATUS_TOKENS or candidate in NAV_TOKENS:
+                j -= 1
+                continue
+            if candidate.startswith("Win:") or candidate.startswith("Loss:"):
+                break
+            if re.match(r'^\d+$', candidate):  # table number
+                break
+            if p1_faction == "Unknown":
+                p1_faction = candidate
+                j -= 1
+                continue
+            p1_name = candidate
+            break
+        j -= 1
+
+        if not p1_name:
+            i += 1
+            continue
+
+        # Walk forward to find player 2 name, faction, result
+        # Skip "View List" and blank tokens
+        k = i + 1
+        p2_name = None
+        p2_faction = "Unknown"
+        p2_result_text = None
+
+        while k < len(lines):
+            candidate = lines[k]
+            if candidate in STATUS_TOKENS or candidate in NAV_TOKENS:
+                k += 1
+                continue
+            if candidate.startswith("Win:") or candidate.startswith("Loss:"):
+                p2_result_text = candidate
+                break
+            if re.match(r'^\d+$', candidate):  # next table number, bail
+                break
+            if p2_name is None:
+                p2_name = candidate
+                k += 1
+                continue
+            p2_faction = candidate
+            k += 1
+
+        if not p2_name or not p2_result_text:
+            i += 1
+            continue
+
+        p1_clean = clean_player_name(p1_name)
+        p2_clean = clean_player_name(p2_name)
+
+        # Team filter
+        if player_factions and (p1_clean not in player_factions or p2_clean not in player_factions):
+            i = k + 1
+            continue
+
+        if p1_result_text.startswith("Win:"):
+            result = "1"
+        elif p1_result_text.startswith("Loss:"):
+            result = "0"
+        else:
+            result = "0.5"
+
+        match_data = {
+            "event_num": event_num,
+            "event_id": event_id,
+            "round": round_num,
+            "player1": p1_clean,
+            "player2": p2_clean,
+            "result": result,
+        }
+        if player_factions:
+            match_data["player1_faction"] = player_factions.get(p1_clean, p1_faction)
+            match_data["player2_faction"] = player_factions.get(p2_clean, p2_faction)
+
+        results.append(match_data)
+        i = k + 1
+
     return results
 
 
