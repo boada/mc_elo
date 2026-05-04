@@ -221,7 +221,7 @@ def scrape_round(event_id: str, event_num: int, round_num: int, page, player_fac
     url = f"https://www.bestcoastpairings.com/event/{event_id}?active_tab=pairings&round={round_num}"
     print(f"\nRound {round_num}: {url}")
 
-    page.goto(url, wait_until="networkidle", timeout=60000)
+    page.goto(url, wait_until="domcontentloaded", timeout=60000)
 
     delay = random.uniform(2.0, 4.0)
     print(f"   Waiting {delay:.1f}s (polite scraping)...")
@@ -265,7 +265,7 @@ def scrape_round(event_id: str, event_num: int, round_num: int, page, player_fac
                         continue
                 if clicked:
                     time.sleep(2.0)
-                    page.wait_for_load_state("networkidle", timeout=30000)
+                    page.wait_for_load_state("domcontentloaded", timeout=30000)
                     page_num += 1
                     delay = random.uniform(1.5, 2.5)
                     time.sleep(delay)
@@ -416,9 +416,11 @@ def parse_matches_from_text(
     return results
 
 
-def scrape_all_rounds(event_id: str, event_num: int, num_rounds: int, team_name: Optional[str] = None, headless: bool = True) -> List[Dict[str, str]]:
+def scrape_all_rounds(event_id: str, event_num: int, num_rounds: int, team_name: Optional[str] = None, headless: bool = True, output_path: Optional[Path] = None, completed_rounds: Optional[set] = None) -> List[Dict[str, str]]:
     """Scrape all rounds from a BCP event, optionally filtering for team matches only."""
     all_results = []
+    if completed_rounds is None:
+        completed_rounds = set()
     
     with sync_playwright() as p:
         print(f"Launching browser...")
@@ -448,9 +450,21 @@ def scrape_all_rounds(event_id: str, event_num: int, num_rounds: int, team_name:
                     print(f"\nWARNING: No players found for team '{team_name}'")
                     print("Proceeding without team filter...\n")
             
+            # Determine CSV fieldnames upfront for checkpointing
+            base_fields = ["event_num", "event_id", "round", "player1", "player2", "result"]
+            fieldnames = base_fields + ["player1_faction", "player2_faction"] if player_factions else base_fields
+
             for round_num in range(1, num_rounds + 1):
+                if round_num in completed_rounds:
+                    print(f"\nRound {round_num}: already scraped, skipping (checkpoint)")
+                    continue
+
                 round_results = scrape_round(event_id, event_num, round_num, page, player_factions)
                 all_results.extend(round_results)
+
+                # Write this round immediately (checkpoint)
+                if output_path is not None:
+                    append_round_results(round_results, output_path, fieldnames)
                 
                 # Extra delay between rounds (except after the last one)
                 if round_num < num_rounds:
@@ -489,6 +503,34 @@ def save_results(results: List[Dict[str, str]], output_path: Path):
     print(f"Saved to {output_path}")
 
 
+def load_completed_rounds(output_path: Path) -> set:
+    """Return set of round numbers already written to the checkpoint CSV."""
+    if not output_path.exists():
+        return set()
+    completed = set()
+    try:
+        with open(output_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                completed.add(int(row["round"]))
+    except Exception:
+        pass
+    return completed
+
+
+def append_round_results(results: List[Dict], output_path: Path, fieldnames: list):
+    """Append a single round's results to the CSV (checkpointing)."""
+    if not results:
+        return
+    file_exists = output_path.exists()
+    with open(output_path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerows(results)
+    print(f"   Checkpoint saved to {output_path}")
+
+
 def main():
     import sys
     
@@ -523,6 +565,18 @@ def main():
     events_dir.mkdir(parents=True, exist_ok=True)
     
     output = events_dir / f"event_{event_num:03d}.csv"
+
+    # Checkpointing: detect rounds already scraped
+    completed_rounds = load_completed_rounds(output)
+    if completed_rounds:
+        print(f"   Checkpoint found: rounds {sorted(completed_rounds)} already in {output}")
+        remaining = set(range(1, num_rounds + 1)) - completed_rounds
+        if not remaining:
+            print(f"   All {num_rounds} rounds already scraped. Nothing to do.")
+            print(f"\nTo update Elo ratings with all events:")
+            print(f"  python update_elo.py")
+            return
+        print(f"   Resuming from round {min(remaining)}...\n")
     
     print(f"\nScraping BCP Event #{event_num}")
     print(f"   BCP ID: {event_id}")
@@ -531,10 +585,12 @@ def main():
         print(f"   Team Filter: {team_name}")
     print(f"   Output: {output}\n")
     
-    results = scrape_all_rounds(event_id, event_num, num_rounds, team_name)
+    results = scrape_all_rounds(
+        event_id, event_num, num_rounds, team_name,
+        output_path=output, completed_rounds=completed_rounds,
+    )
     
-    if results:
-        save_results(results, output)
+    if results or completed_rounds:
         print(f"\nEvent #{event_num} scraped successfully!")
         print(f"\nTo update Elo ratings with all events:")
         print(f"  python update_elo.py")
