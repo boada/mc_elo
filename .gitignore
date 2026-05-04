@@ -40,6 +40,7 @@ venv.bak/
 # Data files
 data/
 ratings.json
+glicko_ratings.json
 
 # OS
 .DS_Store
